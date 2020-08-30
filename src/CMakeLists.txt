@@ -15,6 +15,8 @@ set(RUN_SLEPC_TESTS FALSE)
 find_package(SLEPc 3.8 REQUIRED)
 include_directories(${SLEPC_INCLUDE_DIRS})
 
+find_package(NLPQLP REQUIRED)
+
 # Currently including all directories here so that `#include`s need not specify relative paths.
 include_directories(
 	allocators

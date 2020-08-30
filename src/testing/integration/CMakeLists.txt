@@ -223,7 +223,7 @@ add_test_DPG_w_path(${BIN_PATH_2D} ${EXEC} "euler/NURBS_bump/TEST_Euler_NURBSbum
 
 
 set (EXEC test_integration_optimization)
-set (LIBS_DEPEND ${LIBS_BASE} Core Simulation Test_Integration)
+set (LIBS_DEPEND ${LIBS_BASE} Core Simulation Test_Integration ${NLPQLP_LIBRARIES})
 add_executable(${EXEC} ${EXEC}.c)
 target_link_libraries(${EXEC} ${LIBS_DEPEND})
 add_test_DPG_w_path(${BIN_PATH_2D} ${EXEC} "euler/NURBS_Airfoil/TEST_Euler_NURBSAirfoil_TargetCLTestsReference_ParametricQUAD2D__ml2__p2" "petsc_options_gmres_default")

@@ -484,6 +484,9 @@ static void BFGS_minimizer(struct Optimization_Case *optimization_case, struct O
 static double backtracking_line_search(struct Optimization_Case* optimization_case, double* p_k, double* grad_f_k,
 	double alpha, double wolfe_condition_c, double wolfe_condition_rho, double wolfe_condition_alpha_min){
 
+	printf("Second Wolfe Condition Check needs to be fixed here. In general just use NLPQLP to optimize until fized\n");
+	exit(0);
+
 	struct Simulation *sim = optimization_case->sim;
 
 	int num_design_pts_dofs = optimization_case->num_design_pts_dofs;

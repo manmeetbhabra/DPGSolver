@@ -46,6 +46,7 @@ static void run_test_case(
 	char** argv ///< Standard
 	);
 
+
 // Interface functions ********************************************************************************************** //
 
 /** \test Performs integration testing for the solution convergence (\ref test_integration_run.c).
@@ -56,6 +57,7 @@ int main
 	 char** argv ///< Standard.
 	)
 {
+
 	// Ensure that this is a test case with only one command line argument
 	assert_condition_message((argc == 3) || (argc == 4),"Invalid number of input arguments");
 

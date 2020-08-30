@@ -72,9 +72,6 @@ struct Optimizer_NLPQLP_Data {
 	int LWA, ///< Consult NLPQLP Documentation
 		LKWA, ///< Consult NLPQLP Documentation
 		LACTIV; ///< Consult NLPQLP Documentation
-
-	// NLPQLP Directory Path
-	char nlpqlp_directory_abs_path[STRLEN_MAX*4];
 };
 
 

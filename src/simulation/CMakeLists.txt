@@ -124,6 +124,7 @@ set	(SOURCE
 set	(LIBS_DEPEND
 	 ${MPI_C_LIBRARIES}
 	 ${PETSC_LIBRARIES}
+	 ${NLPQLP_LIBRARIES}
 	 Containers
 	 Intrusive
 	 Mesh

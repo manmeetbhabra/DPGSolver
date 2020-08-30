@@ -10,15 +10,10 @@
 //		options are:
 //			- NLPQLP
 //			- LINE_SEARCH_BFGS
-//
-// - optimizer_nlpqlp_abs_path: If the NLPQLP optimizer is chosen, the absolute
-//		path to the folder with the executable (named 'exec') that will interface with 
-//		NLPQLP must be given here
 // 
 // =================================================================================
 
 optimizer_spec             LINE_SEARCH_BFGS
-optimizer_nlpqlp_abs_path  /Users/manmeetbhabra/Documents/McGill/Research/DPGSolver/NLPQLP_Optimizer
 optimizer_output_files_prefix  Constrained_Target_CL_cases/NACA0012_Target_CL_0.25_Structured/
 
 // =================================================================================

@@ -36,6 +36,9 @@ You should have received a copy of the GNU General Public License along with DPG
 #include "multiarray_constructors.h"
 #include "multiarray_math.h"
 
+// TEMPORARY for testing
+#include "multiarray_print.h"   
+
 #include "geometry.h"
 #include "geometry_parametric.h"
 #include "solve_implicit.h"
@@ -50,6 +53,18 @@ You should have received a copy of the GNU General Public License along with DPG
 
 // TESTING
 #include "functionals.h"
+
+
+// Fortran function declarations ************************************************************************************* //
+
+void nlpqlp_c_wrapper_(int* NP, int* M, int* ME, int* MMAX, int* N,
+	int* NMAX, int* MNN2, double* X, double* F, double* G,
+	double* dF, double* dG, double* U, double* XL, double* XU,
+	double* C, double* D, double* ACC, double* ACCQP, double* STPMIN,
+	int* MAXFUN, int* MAXIT, int* MAXNM, double* RHO, int* IPRINT,
+	int* MODE, int* IOUT, int* IFAIL, double* WA, int* LWA,
+	int* KWA, int* LKWA, int* ACTIVE, int* LACTIV, int* LQL);
+
 
 // Static function declarations ************************************************************************************* //
 
@@ -95,20 +110,9 @@ static void compute_gradient_values_NLPQLP(
 	);
 
 
-/** \brief Write the file that will be read by the NLPQLP program.
- *
- *	NOTE: Uses absolute paths to the input and output files here 
- *		in the optimization directory
+/** \brief 	Call the Fortran NLPQLP subroutine using the compiled data.
  */
-static void write_NLPQLP_input_file(
-	struct Optimizer_NLPQLP_Data* optimizer_nlpqlp_data ///< Consult optimizer_NLPQLP.h
-	);
-
-
-/** \brief Read the data from the OUTPUT.txt file (the data that is returned from
- *	the NLPQLP fortran executable). Load the data into the NLPQLP data structure
- */
-static void read_NLPQLP_output_file(
+static void call_NLPQLP(
 	struct Optimizer_NLPQLP_Data* optimizer_nlpqlp_data ///< Consult optimizer_NLPQLP.h
 	);
 
@@ -167,26 +171,17 @@ void optimizer_NLPQLP(struct Optimization_Case* optimization_case){
 		}
 
 		printf("\nStart NLPQLP  ");
-
+		
 		char transfer_key;
 
 		// Load the control point locations for the optimizer
 		transfer_key = 'n';
 		transfer_control_point_data_NLPQLP(optimization_case, optimizer_nlpqlp_data, transfer_key);
 
-		// Perform the optimization step using NLPQLP
-		write_NLPQLP_input_file(optimizer_nlpqlp_data);  // Write the INPUT.txt file
 
-		// Start a subshell in which the NLPQLP optimizer executable will be run.		
-		// Set the executaion command first and then start the subshell
-		char nlpqlp_execution_command[STRLEN_MAX*4];
-		int index = 0;
-		index += sprintf(nlpqlp_execution_command, "(cd ");
-		index += sprintf(nlpqlp_execution_command + index, "%s", optimizer_nlpqlp_data->nlpqlp_directory_abs_path);
-		index += sprintf(nlpqlp_execution_command + index, " && ./exec)");
-		system(nlpqlp_execution_command);
+		// Call the NLPQLP Solver
+		call_NLPQLP(optimizer_nlpqlp_data); 
 
-		read_NLPQLP_output_file(optimizer_nlpqlp_data);  // Process the OUTPUT.txt file
 
 		// Process new control point locations from the optimizer
 		transfer_key = 'o';
@@ -461,8 +456,6 @@ static void read_optimization_data(struct Optimizer_NLPQLP_Data* optimizer_nlpql
 		if (strstr(line, "ACCQP")) 	read_skip_d_1(line, 1, &optimizer_nlpqlp_data->ACCQP, 1);
 		if (strstr(line, "STPMIN")) read_skip_d_1(line, 1, &optimizer_nlpqlp_data->STPMIN, 1);
 		if (strstr(line, "RHO")) 	read_skip_d_1(line, 1, &optimizer_nlpqlp_data->RHO, 1);
-
-		if (strstr(line, "optimizer_nlpqlp_abs_path")) read_skip_c(line, optimizer_nlpqlp_data->nlpqlp_directory_abs_path);
 	}
 
 	fclose(input_file);
@@ -601,337 +594,25 @@ static void compute_gradient_values_NLPQLP(struct Optimization_Case *optimizatio
 }
 
 
-static void write_NLPQLP_input_file(struct Optimizer_NLPQLP_Data* optimizer_nlpqlp_data){
+static void call_NLPQLP(struct Optimizer_NLPQLP_Data* optimizer_nlpqlp_data){
 
-	char output_name[STRLEN_MAX] = { 0, };
-	strcpy(output_name, optimizer_nlpqlp_data->nlpqlp_directory_abs_path);
-	strcat(output_name,"/INPUT.txt");
+	// Note that dG and C are the only multidimensional arrays. However,
+	// since they are stored in column-major form already in the multiarrays,
+	// we don't need any preprocessing when sending the pointer to Fortran
+	
+	int MMAX = optimizer_nlpqlp_data->M;
 
-	FILE *fp;
-
-	char lql_string[100];
-	int i, j;
-
-	if ((fp = fopen(output_name,"w")) == NULL)
-		printf("Error: File %s did not open.\n", output_name), exit(1);
-
-	// Optimizer Properties
-	fprintf(fp, "NP \t N \t NMAX \t M \t ME \t IFAIL \t MODE \n");
-	fprintf(fp, "%d \t %d \t %d \t %d \t %d \t %d \t %d \n", 
-		optimizer_nlpqlp_data->NP, optimizer_nlpqlp_data->N, 
-		optimizer_nlpqlp_data->NMAX, optimizer_nlpqlp_data->M,
-		optimizer_nlpqlp_data->ME, optimizer_nlpqlp_data->IFAIL, 
-		optimizer_nlpqlp_data->MODE);
-	fprintf(fp, "\n");
-
-	fprintf(fp, "LWA \t LKWA \t LACTIV \t IOUT \t ACC \t ACCQP \n");
-	fprintf(fp, "%d \t %d \t %d \t %d \t %e \t %e \n", 
-		optimizer_nlpqlp_data->LWA, optimizer_nlpqlp_data->LKWA, 
-		optimizer_nlpqlp_data->LACTIV, optimizer_nlpqlp_data->IOUT, 
-		optimizer_nlpqlp_data->ACC, optimizer_nlpqlp_data->ACCQP);
-	fprintf(fp, "\n");
-
-	if(optimizer_nlpqlp_data->LQL){
-		strcpy(lql_string, "T");
-	} else{
-		strcpy(lql_string, "F");
-	}
-
-	fprintf(fp, "STPMIN \t MAXIT \t MAXFUN \t MAXNM \t RHO \t LQL \t IPRINT \n");
-	fprintf(fp, "%e \t %d \t %d \t %d \t %e \t %s \t %d \n", 
-		optimizer_nlpqlp_data->STPMIN, optimizer_nlpqlp_data->MAXIT, 
-		optimizer_nlpqlp_data->MAXFUN, optimizer_nlpqlp_data->MAXNM,
-		optimizer_nlpqlp_data->RHO, lql_string, optimizer_nlpqlp_data->IPRINT);
-	fprintf(fp, "\n");
-
-	// Design Variable Values
-	fprintf(fp, "X \t XL \t XU \n");
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		fprintf(fp, "%.14e \t %.14e \t %.14e \n", 
-			optimizer_nlpqlp_data->X->data[i], 
-			optimizer_nlpqlp_data->XL->data[i], 
-			optimizer_nlpqlp_data->XU->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	// Objective Function Evaluation
-	fprintf(fp, "F \n");
-	fprintf(fp, "%.14e \n", optimizer_nlpqlp_data->F);
-	fprintf(fp, "\n");
-
-	// Constraint Function Evaluations
-	fprintf(fp, "G \n");
-	for (i = 0; i < optimizer_nlpqlp_data->M; i++)
-		fprintf(fp, "%.14e \n", optimizer_nlpqlp_data->G->data[i]);
-	fprintf(fp, "\n");
-
-	// Gradient Objective Function
-	fprintf(fp, "dF \n");
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++)
-		fprintf(fp, "%.14e ", optimizer_nlpqlp_data->dF->data[i]);
-	fprintf(fp, "\n \n");
-
-	// Gradient Constraint Functions (Column Major Ordering)
-	fprintf(fp, "dG \n");
-	for (i = 0; i < optimizer_nlpqlp_data->M; i++){
-		for (j = 0; j < optimizer_nlpqlp_data->NMAX; j++){
-
-			fprintf(fp, "%.14e ", get_col_Multiarray_d(j, optimizer_nlpqlp_data->dG)[i]);
-		}
-		fprintf(fp, "\n");
-	}
-	fprintf(fp, "\n");
-
-	// Hessian Approximation (C)
-	fprintf(fp, "C \n");
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		for (j = 0; j < optimizer_nlpqlp_data->NMAX; j++){
-			fprintf(fp, "%.14e ", get_col_Multiarray_d(j, optimizer_nlpqlp_data->C)[i]);
-		}
-		fprintf(fp, "\n");
-	}
-	fprintf(fp, "\n");
-
-	// Multipliers (U)
-	fprintf(fp, "U \n");
-	for (i = 0; i < optimizer_nlpqlp_data->MNN2; i++){
-		fprintf(fp, "%.14e \n", optimizer_nlpqlp_data->U->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	// D Structure
-	fprintf(fp, "D \n");
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		fprintf(fp, "%.14e \n", optimizer_nlpqlp_data->D->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	// WA Structure
-	fprintf(fp, "WA \n");
-	for (i = 0; i < optimizer_nlpqlp_data->LWA; i++){
-		fprintf(fp, "%.14e \n", optimizer_nlpqlp_data->WA->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	// KWA Structure
-	fprintf(fp, "KWA \n");
-	for (i = 0; i < optimizer_nlpqlp_data->LKWA; i++){
-		fprintf(fp, "%d \n", optimizer_nlpqlp_data->KWA->data[i]);
-	}
-	fprintf(fp, "\n");
-
-	// Active
-	fprintf(fp, "ACTIVE \n");
-	for (i = 0; i < optimizer_nlpqlp_data->LACTIV; i++){
-		if (optimizer_nlpqlp_data->ACTIVE->data[i])
-			fprintf(fp, "T\n");
-		else
-			fprintf(fp, "F\n");
-	}
-	fprintf(fp, "\n");
-
-	fclose(fp);
+	nlpqlp_c_wrapper_(
+		&(optimizer_nlpqlp_data->NP), &(optimizer_nlpqlp_data->M), &(optimizer_nlpqlp_data->ME), &MMAX, &(optimizer_nlpqlp_data->N),
+		&(optimizer_nlpqlp_data->NMAX), &(optimizer_nlpqlp_data->MNN2), &(optimizer_nlpqlp_data->X->data[0]), &(optimizer_nlpqlp_data->F), &(optimizer_nlpqlp_data->G->data[0]),
+		&(optimizer_nlpqlp_data->dF->data[0]), 
+		&(optimizer_nlpqlp_data->dG->data[0]), &(optimizer_nlpqlp_data->U->data[0]), &(optimizer_nlpqlp_data->XL->data[0]), &(optimizer_nlpqlp_data->XU->data[0]),
+		&(optimizer_nlpqlp_data->C->data[0]), &(optimizer_nlpqlp_data->D->data[0]), &(optimizer_nlpqlp_data->ACC), &(optimizer_nlpqlp_data->ACCQP), &(optimizer_nlpqlp_data->STPMIN),
+		&(optimizer_nlpqlp_data->MAXFUN), &(optimizer_nlpqlp_data->MAXIT), &(optimizer_nlpqlp_data->MAXNM), &(optimizer_nlpqlp_data->RHO), &(optimizer_nlpqlp_data->IPRINT),
+		&(optimizer_nlpqlp_data->MODE), &(optimizer_nlpqlp_data->IOUT), &(optimizer_nlpqlp_data->IFAIL), &(optimizer_nlpqlp_data->WA->data[0]), &(optimizer_nlpqlp_data->LWA),
+		&(optimizer_nlpqlp_data->KWA->data[0]), &(optimizer_nlpqlp_data->LKWA), &(optimizer_nlpqlp_data->ACTIVE->data[0]), &(optimizer_nlpqlp_data->LACTIV), &(optimizer_nlpqlp_data->LQL));
+		
 }
-
-
-static void read_NLPQLP_output_file(struct Optimizer_NLPQLP_Data* optimizer_nlpqlp_data){
-
-	FILE *fp;
-
-	char line[5000], lql_string[200], *strings, *stringe;
-	int i, j;
-
-	double tmpd;
-	long tmpl;
-
-	// Open the output file
-	char output_name[STRLEN_MAX] = { 0, };
-	strcpy(output_name, optimizer_nlpqlp_data->nlpqlp_directory_abs_path);
-	strcat(output_name,"/OUTPUT.txt");
-	if ((fp = fopen(output_name,"r")) == NULL)
-		printf("Error: File %s did not open.\n", output_name), exit(1);
-
-	// Properties Block
-	fgets(line, sizeof line, fp); // Header
-	fgets(line, sizeof line, fp);
-	sscanf(line, "%d %d %d %d %d %d %d \n", 
-				&optimizer_nlpqlp_data->NP,
-				&optimizer_nlpqlp_data->N,
-				&optimizer_nlpqlp_data->NMAX,
-				&optimizer_nlpqlp_data->M,
-				&optimizer_nlpqlp_data->ME,
-				&optimizer_nlpqlp_data->IFAIL,
-				&optimizer_nlpqlp_data->MODE);
-	fgets(line, sizeof line, fp);  // Space
-
-	fgets(line, sizeof line, fp); // Header
-	fgets(line, sizeof line, fp);
-	sscanf(line, "%d %d %d %d %lf %lf \n", 
-				&optimizer_nlpqlp_data->LWA,
-				&optimizer_nlpqlp_data->LKWA,
-				&optimizer_nlpqlp_data->LACTIV,
-				&optimizer_nlpqlp_data->IOUT,
-				&optimizer_nlpqlp_data->ACC,
-				&optimizer_nlpqlp_data->ACCQP);
-	fgets(line, sizeof line, fp);  // Space
-
-	fgets(line, sizeof line, fp); // Header
-	fgets(line, sizeof line, fp);
-	sscanf(line, "%lf %d %d %d %lf %s %d \n", 
-				&optimizer_nlpqlp_data->STPMIN,
-				&optimizer_nlpqlp_data->MAXIT,
-				&optimizer_nlpqlp_data->MAXFUN,
-				&optimizer_nlpqlp_data->MAXNM,
-				&optimizer_nlpqlp_data->RHO,
-				lql_string,
-				&optimizer_nlpqlp_data->IPRINT);
-	fgets(line, sizeof line, fp);  // Space
-
-	if (strstr(lql_string, "T"))
-		optimizer_nlpqlp_data->LQL = 1;
-	else
-		optimizer_nlpqlp_data->LQL = 0;
-
-	// Design Points
-	fgets(line, sizeof line, fp); // Header
-
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-
-		// Get the three values from the line
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-		optimizer_nlpqlp_data->X->data[i] = tmpd;
-
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-		optimizer_nlpqlp_data->XL->data[i] = tmpd;
-
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-		optimizer_nlpqlp_data->XU->data[i] = tmpd;
-
-	}
-
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// F (Objective Function Value, outdated so does not need to be saved)
-	fgets(line, sizeof line, fp);  // Header
-	fgets(line, sizeof line, fp); 
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// G (Constraint Function Values, outdated so does not need to be saved)
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->M; i++)
-		fgets(line, sizeof line, fp); 
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// dF (Gradient of the objective function, outdated so does not need to be saved)
-	fgets(line, sizeof line, fp);  // Header
-	fgets(line, sizeof line, fp); 
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// dG (Gradient of the constraint functions, outdated so does not need to be saved)
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->M; i++)
-		fgets(line, sizeof line, fp); 
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// C 
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-		for (j = 0; j < optimizer_nlpqlp_data->NMAX; j++){
-			tmpd = strtod(strings, &stringe);
-			strings = stringe;
-			get_col_Multiarray_d(j,optimizer_nlpqlp_data->C)[i] = tmpd;
-
-		}
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-	// U 
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->MNN2; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-
-		optimizer_nlpqlp_data->U->data[i] = tmpd;
-
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// D
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->NMAX; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-
-		optimizer_nlpqlp_data->D->data[i] = tmpd;
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// WA
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->LWA; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-		tmpd = strtod(strings, &stringe);
-		strings = stringe;
-
-		optimizer_nlpqlp_data->WA->data[i] = tmpd;
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// KWA
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->LKWA; i++){
-		fgets(line, sizeof line, fp);
-
-		strings = line;
-		tmpl = strtol(strings, &stringe, 10);
-		strings = stringe;
-
-		optimizer_nlpqlp_data->KWA->data[i] = (int)tmpl;
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-
-	// ACTIVE
-	fgets(line, sizeof line, fp);  // Header
-	for (i = 0; i < optimizer_nlpqlp_data->LACTIV; i++){
-		fgets(line, sizeof line, fp);
-
-		if (strstr(line, "T"))
-			optimizer_nlpqlp_data->ACTIVE->data[i] = 1;
-		else
-			optimizer_nlpqlp_data->ACTIVE->data[i] = 0;
-
-	}
-	fgets(line, sizeof line, fp);  // Space
-
-	fclose(fp);
-}
-
 
 
 static void transfer_control_point_data_NLPQLP(struct Optimization_Case *optimization_case, 

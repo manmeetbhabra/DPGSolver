@@ -11,7 +11,7 @@ cfl_initial   5e-1
 
 time_step  2.5E-3
 time_final 1E10
-exit_tol_e  2E-2
+exit_tol_e  1E-2
 
 num_flux_1st Roe-Pike
 test_norm    H0 H1_upwind
